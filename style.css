@@ -17,6 +17,12 @@
 
 *{ box-sizing: border-box; }
 
+/* Any element using the `hidden` attribute must actually hide, even when a
+   class on the same element also sets `display` (e.g. `display:flex`).
+   Without this, author styles win the cascade over the browser's built-in
+   [hidden]{display:none} and the element stays visible. */
+[hidden]{ display: none !important; }
+
 html, body{
   height: 100%;
   margin: 0;
