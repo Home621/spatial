@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { pipeline, RawImage } from '@huggingface/transformers';
+import { Client } from '@gradio/client';
 
 /* ----------------------------------------------------------------------
    Rangefinder — turns a flat photo into a mouse/gyro-reactive "spatial
@@ -16,6 +17,12 @@ const MODEL_ID = 'onnx-community/depth-anything-v2-small';
 const MAX_IMAGE_DIM = 1600;      // cap texture size for perf on mobile GPUs
 const MAX_ANGLE = 0.22;          // radians of camera orbit at full tilt/mouse throw
 const IDLE_TIMEOUT = 2200;       // ms of no input before ambient drift kicks in
+
+// Set this to your own free Hugging Face Space (see /space in this project)
+// to have depth computed server-side first, e.g. 'yourname/depth-anything-v2-small'.
+// Leave it '' to skip straight to on-device inference.
+const REMOTE_SPACE = '';
+const REMOTE_TIMEOUT_MS = 20000; // free Spaces sleep when idle; give a cold one time to wake
 
 // ---- DOM ----
 const dropzone = document.getElementById('dropzone');
@@ -82,8 +89,9 @@ async function handleFile(file) {
     buildScene(canvas, depth);
     hideStatus();
     controlRail.hidden = false;
-    hudStatus.textContent =
-      `${canvas.width}×${canvas.height} · depth-anything-v2-small (q8) · ${estimatorDevice}`;
+    hudStatus.textContent = depthSource === 'remote'
+      ? `${canvas.width}×${canvas.height} · depth via your Space (remote)`
+      : `${canvas.width}×${canvas.height} · depth-anything-v2-small (q8) · on-device (${estimatorDevice})`;
     maybeShowMotionButton();
   } catch (err) {
     console.error(err);
@@ -159,13 +167,79 @@ async function getEstimator() {
   return estimator;
 }
 
+let depthSource = 'local'; // 'remote' | 'local' — which path produced the last depth map
+
 async function estimateDepth(colorCanvas) {
+  if (REMOTE_SPACE) {
+    setStatus('Asking your Space to compute depth… (can take ~30s if it was asleep)', true);
+    setProgress(null);
+    const remote = await tryRemoteDepth(colorCanvas);
+    if (remote) {
+      depthSource = 'remote';
+      return remote;
+    }
+    setStatus('Space unavailable — running the depth model on this device instead…', true);
+  }
+  depthSource = 'local';
+  return estimateDepthLocal(colorCanvas);
+}
+
+async function estimateDepthLocal(colorCanvas) {
   const est = await getEstimator();
-  setStatus('Running depth estimation…', true);
+  setStatus('Running depth estimation on this device…', true);
   setProgress(null);
   const rawImage = RawImage.fromCanvas(colorCanvas);
   const { depth } = await est(rawImage);
   return depth.toCanvas();
+}
+
+// Calls a Gradio Space (see the /space folder) that runs the same depth
+// model server-side. Returns a canvas on success, or null on any failure —
+// caller falls back to local inference either way, so this never throws.
+async function tryRemoteDepth(colorCanvas) {
+  try {
+    const blob = await new Promise(resolve => colorCanvas.toBlob(resolve, 'image/jpeg', 0.92));
+    const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+
+    const client = await withTimeout(Client.connect(REMOTE_SPACE), REMOTE_TIMEOUT_MS);
+    const result = await withTimeout(
+      client.predict('/predict', { image: file }),
+      REMOTE_TIMEOUT_MS
+    );
+
+    const url = result?.data?.[0]?.url;
+    if (!url) throw new Error('Space returned no depth image');
+
+    const img = await loadImageFromURL(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    return canvas;
+  } catch (err) {
+    console.warn('Remote depth via Space failed, falling back to local:', err);
+    return null;
+  }
+}
+
+function loadImageFromURL(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timed out')), ms);
+    promise.then(
+      v => { clearTimeout(timer); resolve(v); },
+      err => { clearTimeout(timer); reject(err); }
+    );
+  });
 }
 
 // ============================== Three.js scene ==============================
