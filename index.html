@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Rangefinder — spatial photos in your browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+
+<!-- Three.js and Transformers.js are loaded from CDN at runtime, in the user's
+     own browser — this requires an internet connection the first time the
+     page runs (and the first time a photo is processed, to download the
+     depth-estimation model, which is then cached by the browser). -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="stage">
+
+  <header class="topbar">
+    <div class="wordmark">
+      <span class="wordmark-glyph" aria-hidden="true"></span>
+      Rangefinder
+    </div>
+    <div class="tagline">flat photo → spatial photo, entirely on your device</div>
+  </header>
+
+  <main class="viewer" id="viewer">
+
+    <!-- Empty state / drop zone -->
+    <div class="dropzone" id="dropzone" tabindex="0" role="button"
+         aria-label="Upload a photo to convert into a spatial photo">
+      <div class="aperture" aria-hidden="true">
+        <svg viewBox="0 0 120 120" width="72" height="72">
+          <g fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="60" cy="60" r="52" stroke-dasharray="4 6" />
+            <path d="M60 18 L74 60 L60 102 L46 60 Z" />
+            <path d="M18 60 L60 46 L102 60 L60 74 Z" />
+          </g>
+        </svg>
+      </div>
+      <p class="dropzone-title">Drop a photo, or click to choose one</p>
+      <p class="dropzone-sub">Depth is estimated locally in your browser — nothing is uploaded anywhere.</p>
+      <input type="file" id="fileInput" accept="image/*" hidden />
+    </div>
+
+    <!-- Canvas stage (hidden until an image is loaded) -->
+    <div class="canvas-frame" id="canvasFrame" hidden>
+      <div class="corner tl" aria-hidden="true"></div>
+      <div class="corner tr" aria-hidden="true"></div>
+      <div class="corner bl" aria-hidden="true"></div>
+      <div class="corner br" aria-hidden="true"></div>
+
+      <canvas id="glCanvas"></canvas>
+
+      <img id="depthPreview" class="depth-preview" alt="Depth map preview" hidden />
+
+      <div class="hud" id="hud">
+        <span id="hudStatus">—</span>
+      </div>
+    </div>
+
+    <!-- Loading / status overlay -->
+    <div class="status-overlay" id="statusOverlay" hidden>
+      <div class="status-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="statusText">Loading depth model…</p>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="control-rail" id="controlRail" hidden>
+    <button class="btn btn-ghost" id="newPhotoBtn" title="Choose a different photo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h4l2-2h4l2 2h4v16H4z"/><circle cx="12" cy="13" r="4"/></svg>
+      New photo
+    </button>
+
+    <div class="control">
+      <label for="depthSlider">Depth</label>
+      <input type="range" id="depthSlider" min="0" max="120" value="55" />
+    </div>
+
+    <button class="btn btn-ghost toggle" id="invertBtn" title="Flip if the effect looks inside-out" aria-pressed="false">
+      Invert
+    </button>
+
+    <button class="btn btn-ghost toggle" id="depthMapBtn" title="Show the raw depth map" aria-pressed="false">
+      Depth map
+    </button>
+
+    <button class="btn btn-accent" id="motionBtn" hidden>
+      Enable motion
+    </button>
+  </footer>
+
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
