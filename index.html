@@ -73,9 +73,10 @@
     <!-- Loading / status overlay -->
     <div class="status-overlay" id="statusOverlay" hidden>
       <div class="status-box">
-        <div class="spinner" aria-hidden="true"></div>
+        <div class="spinner" id="spinner" aria-hidden="true"></div>
         <p id="statusText">Loading depth model…</p>
-        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
+        <button class="btn btn-ghost" id="retryBtn" hidden>Try a different photo</button>
       </div>
     </div>
 
