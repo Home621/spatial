@@ -1,6 +1,12 @@
 import * as THREE from 'three';
-import { pipeline, RawImage } from '@huggingface/transformers';
+import { pipeline, RawImage, env } from '@huggingface/transformers';
 import { Client } from '@gradio/client';
+
+// GitHub Pages (and most static hosts) can't set the COOP/COEP headers that
+// onnxruntime-web's multi-threaded WASM path wants. Depending on the exact
+// build, that can throw instead of gracefully degrading — so force
+// single-threaded WASM up front. Slightly slower, much more compatible.
+env.backends.onnx.wasm.numThreads = 1;
 
 /* ----------------------------------------------------------------------
    Rangefinder — turns a flat photo into a mouse/gyro-reactive "spatial
@@ -33,7 +39,10 @@ const depthPreview = document.getElementById('depthPreview');
 const hudStatus = document.getElementById('hudStatus');
 const statusOverlay = document.getElementById('statusOverlay');
 const statusText = document.getElementById('statusText');
+const spinnerEl = document.getElementById('spinner');
+const progressTrack = document.getElementById('progressTrack');
 const progressFill = document.getElementById('progressFill');
+const retryBtn = document.getElementById('retryBtn');
 const controlRail = document.getElementById('controlRail');
 const newPhotoBtn = document.getElementById('newPhotoBtn');
 const depthSlider = document.getElementById('depthSlider');
@@ -95,7 +104,8 @@ async function handleFile(file) {
     maybeShowMotionButton();
   } catch (err) {
     console.error(err);
-    setStatus('Something went wrong loading the depth model or image. Check your connection and try again.', false);
+    const hint = err?.message ? ` (${err.message})` : '';
+    showError(`Couldn't generate a depth map${hint}. Try a different photo, or check the console for details.`);
   }
 }
 
@@ -427,7 +437,30 @@ function setStatus(msg, show) {
   statusText.textContent = msg;
   statusOverlay.hidden = !show;
 }
-function hideStatus() { statusOverlay.hidden = true; }
+
+function showError(msg) {
+  statusText.textContent = msg;
+  spinnerEl.hidden = true;
+  progressTrack.hidden = true;
+  retryBtn.hidden = false;
+  statusOverlay.hidden = false;
+}
+
+function hideStatus() {
+  statusOverlay.hidden = true;
+  spinnerEl.hidden = false;
+  progressTrack.hidden = false;
+  retryBtn.hidden = true;
+}
+
 function setProgress(pct) {
   progressFill.style.width = pct === null ? '6%' : `${pct}%`;
 }
+
+retryBtn.addEventListener('click', () => {
+  hideStatus();
+  canvasFrame.hidden = true;
+  controlRail.hidden = true;
+  dropzone.hidden = false;
+  fileInput.value = '';
+});
